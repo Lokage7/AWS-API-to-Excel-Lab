@@ -1,0 +1,265 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Enhanced Security Hub to Excel Pipeline - AI-Powered Analysis & Workflow Automation'
+
+Parameters:
+  S3BucketName:
+    Type: String
+    Description: S3 bucket name for storing Excel reports
+    Default: security-hub-reports-enhanced
+    MinLength: 3
+    MaxLength: 63
+    AllowedPattern: '^[a-z0-9][a-z0-9-]*[a-z0-9-]*[a-z0-9-]*$'
+  
+  SourceS3Key:
+    Type: String
+    Description: S3 key for Lambda source code
+    Default: source/lambda-enhanced.zip
+  
+  FunctionName:
+    Type: String
+    Description: Lambda function name
+    Default: security-hub-excel-generator-enhanced
+    MinLength: 1
+    MaxLength: 64
+    AllowedPattern: '^[a-zA-Z][a-zA-Z0-9-]*[a-zA-Z0-9-]*$'
+  
+  MemorySize:
+    Type: Number
+    Description: Lambda function memory size in MB
+    Default: 512
+    MinValue: 128
+    MaxValue: 3008
+  
+  Timeout:
+    Type: Number
+    Description: Lambda function timeout in seconds
+    Default: 300
+    MinValue: 1
+    MaxValue: 900
+
+  EnableAIAnalysis:
+    Type: String
+    Description: Enable AWS Bedrock AI analysis
+    Default: 'true'
+    AllowedValues: ['true', 'false']
+  
+  EnableSlack:
+    Type: String
+    Description: Enable Slack notifications
+    Default: 'false'
+    AllowedValues: ['true', 'false']
+  
+  EnableServiceNow:
+    Type: String
+    Description: Enable ServiceNow integration
+    Default: 'false'
+    AllowedValues: ['true', 'false']
+  
+  EnableJira:
+    Type: String
+    Description: Enable Jira integration
+    Default: 'false'
+    AllowedValues: ['true', 'false']
+
+Resources:
+  # Enhanced IAM Role for Lambda Function
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${FunctionName}-execution-role'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: SecurityHubExcelEnhancedPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              # Security Hub Access
+              - Effect: Allow
+                Action:
+                  - securityhub:GetFindings
+                  - securityhub:GetEnabledStandards
+                  - securityhub:DescribeHub
+                Resource: '*'
+              
+              # AWS Bedrock Access
+              - Effect: Allow
+                Action:
+                  - bedrock:InvokeModel
+                  - bedrock:InvokeModelWithResponseStream
+                Resource: '*'
+              
+              # S3 Access
+              - Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:PutObjectAcl
+                  - s3:GetObject
+                  - s3:ListBucket
+                Resource: 
+                  - !Sub 'arn:aws:s3:::${S3BucketName}/*'
+                  - !Sub 'arn:aws:s3:::${S3BucketName}'
+              
+              # Secrets Manager Access
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource: '*'
+              
+              # CloudWatch Logs Access
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:*'
+
+  # Enhanced Lambda Function
+  SecurityHubExcelFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Ref FunctionName
+      Runtime: python3.9
+      Handler: lambda_function.lambda_handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Code:
+        S3Bucket: !Ref S3BucketName
+        S3Key: !Ref SourceS3Key
+      MemorySize: !Ref MemorySize
+      Timeout: !Ref Timeout
+      Environment:
+        Variables:
+          S3_BUCKET_NAME: !Ref S3BucketName
+          BEDROCK_MODEL_ID: anthropic.claude-3-haiku-20240307-v1:0
+          ENABLE_AI_ANALYSIS: !Ref EnableAIAnalysis
+          ENABLE_SLACK: !Ref EnableSlack
+          ENABLE_SERVICENOW: !Ref EnableServiceNow
+          ENABLE_JIRA: !Ref EnableJira
+          SLACK_WEBHOOK_URL: ''
+          SERVICENOW_SECRET_NAME: ''
+          JIRA_SECRET_NAME: ''
+      Description: 'Enhanced Security Hub to Excel report generator with AI analysis and workflow automation'
+      Tags:
+        - Key: Project
+          Value: SecurityHubExcelEnhanced
+        - Key: Environment
+          Value: Production
+        - Key: DeploymentMethod
+          Value: CloudFormation
+        - Key: Features
+          Value: AI-Powered,Multi-Framework,Workflow-Integration
+
+  # S3 Bucket for Reports
+  ReportsBucket:
+    Type: AWS::S3::Bucket
+    Condition: CreateBucket
+    Properties:
+      BucketName: !Ref S3BucketName
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+      ServerSideEncryptionConfiguration:
+        ServerSideEncryptionRule:
+          ApplyServerSideEncryptionByDefault: true
+          SSEAlgorithm: AES256
+      LifecycleConfiguration:
+        Rules:
+          - Id: DeleteOldReports
+            Status: Enabled
+            ExpirationInDays: 90
+            Filter:
+              Prefix: reports/
+      NotificationConfiguration:
+        LambdaConfigurations:
+          - Event: s3:ObjectCreated:*
+            Function: !GetAtt SecurityHubExcelFunction.Arn
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: prefix
+                    Value: reports/
+      Tags:
+        - Key: Project
+          Value: SecurityHubExcelEnhanced
+        - Key: Environment
+          Value: Production
+        - Key: Purpose
+          Value: Compliance-Reports
+
+  # CloudWatch Log Group
+  FunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${FunctionName}'
+      RetentionInDays: 30
+
+  # EventBridge Rule for Scheduled Execution (Optional - disabled by default)
+  ScheduledExecutionRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub '${FunctionName}-weekly-schedule'
+      Description: 'Weekly execution of Enhanced Security Hub Excel generator'
+      ScheduleExpression: 'rate(7 days)'
+      State: DISABLED
+      Targets:
+        - Arn: !GetAtt SecurityHubExcelFunction.Arn
+          Id: SecurityHubExcelTarget
+
+  # Permission for EventBridge to invoke Lambda
+  LambdaInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref FunctionName
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt ScheduledExecutionRule.Arn
+
+Conditions:
+  CreateBucket: !Equals [!Ref S3BucketName, 'security-hub-reports-enhanced']
+
+Outputs:
+  FunctionName:
+    Description: 'Enhanced Lambda function name'
+    Value: !Ref SecurityHubExcelFunction
+    Export:
+      Name: !Sub '${AWS::StackName}-FunctionName'
+  
+  FunctionArn:
+    Description: 'Enhanced Lambda function ARN'
+    Value: !GetAtt SecurityHubExcelFunction.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-FunctionArn'
+  
+  S3BucketName:
+    Description: 'S3 bucket for enhanced reports'
+    Value: !Ref S3BucketName
+    Export:
+      Name: !Sub '${AWS::StackName}-S3Bucket'
+  
+  ScheduleRuleArn:
+    Description: 'EventBridge rule ARN for scheduling'
+    Value: !GetAtt ScheduledExecutionRule.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-ScheduleRule'
+  
+  LogGroupName:
+    Description: 'CloudWatch log group name'
+    Value: !Ref FunctionLogGroup
+    Export:
+      Name: !Sub '${AWS::StackName}-LogGroup'
+  
+  StackStatus:
+    Description: 'Deployment status and features enabled'
+    Value: !Sub 'Enhanced Security Hub Excel Pipeline deployed with AI Analysis: ${EnableAIAnalysis}, Slack: ${EnableSlack}, ServiceNow: ${EnableServiceNow}, Jira: ${EnableJira}'
