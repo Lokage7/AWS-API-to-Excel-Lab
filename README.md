@@ -387,13 +387,6 @@ aws iam simulate-principal-policy --policy-source-arn arn:aws:iam::703959535548:
 
 ## 🤝 Contributing
 
-### Development Workflow
-1. **Fork** the repository
-2. **Create** feature branch (`git checkout -b feature/amazing-feature`)
-3. **Test** changes thoroughly
-4. **Submit** pull request with detailed description
-5. **Review** and merge changes
-
 ### Code Standards
 - **Python**: Follow PEP 8 style guidelines
 - **CloudFormation**: Use YAML best practices
