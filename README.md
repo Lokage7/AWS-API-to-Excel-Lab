@@ -1,6 +1,6 @@
 # AWS Security Hub to Excel Pipeline: Enhanced GRC Automation
 
-**GRC Engineering Club — Bridging Technical Security Data and Business Compliance**
+**GRC Engineering Club: Bridging Technical Security Data and Business Compliance**
 
 This project transforms AWS Security Hub findings into comprehensive, audit-ready Excel reports with AI-powered insights, multi-framework compliance mapping, and workflow automation. It demonstrates how GRC engineers can bridge the gap between technical security data and business compliance requirements.
 
